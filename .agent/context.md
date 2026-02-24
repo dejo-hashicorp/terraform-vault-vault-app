@@ -1,0 +1,1 @@
+This is a Terraform no-code module that will create a Vault namespace within an exisiting Vault. That vaults information will get passed dynamically by Variables. The goal will be for this module to be deployed using Waypoint as an add-on to exisiting applications so they can have a place to Vault their secrets that is uniquely theres.
