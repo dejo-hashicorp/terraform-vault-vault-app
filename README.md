@@ -1,418 +1,247 @@
-# Terraform Vault No-Code Module
+# Terraform Vault Module
 
-A Terraform no-code module that creates isolated Vault namespaces for applications. This module enables applications to have their own dedicated secret storage and authentication mechanisms within an existing Vault instance. Designed to be deployed as a Waypoint add-on.
-
-## Overview
-
-This module provisions:
-- **Vault Namespace**: An isolated namespace for the application
-- **KV Secrets Engine**: A KV v2 secrets engine within the namespace
-- **AppRole Authentication**: An AppRole auth method for secure application authentication
-- **Policy**: A policy defining access permissions for the application
-- **Secret Management**: Automated generation of RoleID and SecretID for application access
-- **Collision Avoidance**: Multiple strategies to ensure unique namespaces even when app names collide
+A Terraform module that creates isolated Vault namespaces for applications with built-in collision avoidance. Perfect for multi-tenant deployments and Waypoint add-ons.
 
 ## Features
 
-- 🔐 Isolated secret storage per application
-- 🎯 AppRole authentication for secure service-to-service communication
-- ⚙️ No-code deployment via Waypoint add-ons
-- 🔑 Automatic credential generation
-- 🛡️ Policy-based access control
-- 📝 Configurable TTLs and security settings
-- 🆔 UUID/ID-based collision avoidance for duplicate app names
-- 🎲 Optional random suffix for automatic uniqueness
+- **Isolated Namespaces** - Each application gets its own namespace
+- **AppRole Auth** - Automatic RoleID and SecretID generation
+- **KV Secrets Engine** - V2 secrets storage within each namespace
+- **Policy-Based Access** - Fine-grained permission control
+- **Collision Avoidance** - Multiple strategies to handle duplicate app names:
+  - **Organization/Team UUID** - Scope namespaces by customer/org (recommended for SaaS)
+  - **Random Suffix** - Auto-append random ID
+  - **Manual Override** - Full control over namespace path
+- **Waypoint Integration** - Deploy as add-on to existing applications
+- **Environment Variables** - Configure via env vars for CI/CD pipelines
 
-## Prerequisites
+## Quick Start
 
-- Terraform >= 1.0
-- Vault >= 1.8 with admin access
-- Valid Vault token with appropriate permissions
-- Waypoint >= 1.0 (for add-on deployment)
-
-## Usage
-
-### Direct Terraform Usage - Simple (Recommended)
+### Simple Deployment
 
 ```hcl
-module "vault_app_namespace" {
+module "vault_app" {
   source = "./"
 
-  app_name      = "my-application"
+  app_name      = "payment-service"
   vault_address = "https://vault.example.com:8200"
-  vault_token   = var.vault_admin_token
-  # namespace_path will be auto-generated as: my-application
+  vault_token   = var.vault_token
 }
+
+# Namespace created: payment-service
 ```
 
-### Direct Terraform Usage - With Prefix
+### Multi-Tenant with Organization UUID
 
 ```hcl
-module "vault_app_namespace" {
+module "vault_app" {
   source = "./"
 
-  app_name           = "my-application"
-  vault_address      = "https://vault.example.com:8200"
-  vault_token        = var.vault_admin_token
-  namespace_prefix   = "ns1/cns2/"
-  # namespace_path will be auto-generated as: ns1/cns2/my-application
+  app_name        = "payment-service"
+  organization_id = "customer-uuid-123"
+  vault_address   = "https://vault.example.com:8200"
+  vault_token     = var.vault_token
 }
+
+# Namespace created: customer-uuid-123/payment-service
+# Prevents collision if another customer also has "payment-service"
 ```
 
-### Via Waypoint Add-on - Simple
+### With Prefix and Team Scoping
 
 ```hcl
-addon {
-  pack = "terraform-vault-vault-app"
+module "vault_app" {
+  source = "./"
 
-  variables = {
-    app_name           = "my-application"
-    vault_address      = "https://vault.example.com:8200"
-    vault_token        = var.vault_token
-  }
+  app_name         = "api-server"
+  organization_id  = "acme-corp"
+  team_id          = "platform-team"
+  namespace_prefix = "production/"
+  vault_address    = "https://vault.example.com:8200"
+  vault_token      = var.vault_token
 }
+
+# Namespace created: production/acme-corp/platform-team/api-server
 ```
 
-### Via Waypoint Add-on - With Environment Variable Prefix
-
-Set the environment variable before running Waypoint:
-```bash
-export VAULT_NAMESPACE_PREFIX="ns1/cns2/"
-waypoint up
-```
-
-Then in your Waypoint configuration (the prefix will be automatically picked up):
-```hcl
-addon {
-  pack = "terraform-vault-vault-app"
-
-  variables = {
-    app_name           = "my-application"
-    vault_address      = "https://vault.example.com:8200"
-    vault_token        = var.vault_token
-    # namespace_prefix will be read from VAULT_NAMESPACE_PREFIX env var
-  }
-}
-```
-
-## Module Variables
-
-### Required Variables
+## Required Variables
 
 | Variable | Type | Description |
 |----------|------|-------------|
-| `vault_address` | string | The address of the Vault instance (e.g., https://vault.example.com:8200) |
-| `vault_token` | string | The authentication token for Vault (sensitive) |
-| `app_name` | string | The name of the application (1-50 characters) - namespace is derived from this |
+| `vault_address` | string | Vault server address (e.g., `https://vault.example.com:8200`) |
+| `vault_token` | string | Vault authentication token (sensitive) |
+| `app_name` | string | Application name (1-50 chars) |
 
-### Collision Avoidance Variables
+## Collision Avoidance Variables
+
+| Variable | Type | Default | Description | Env Var |
+|----------|------|---------|-------------|---------|
+| `organization_id` | string | "" | Customer/organization UUID | `VAULT_ORGANIZATION_ID` |
+| `team_id` | string | "" | Team ID for hierarchical scoping | `VAULT_TEAM_ID` |
+| `app_id` | string | "" | Explicit app UUID (overrides organization_id) | `VAULT_APP_ID` |
+| `use_random_suffix` | bool | false | Auto-append random suffix for uniqueness | `VAULT_USE_RANDOM_SUFFIX` |
+| `namespace_prefix` | string | "" | Prefix for all namespaces (e.g., `production/`) | `VAULT_NAMESPACE_PREFIX` |
+| `namespace_path` | string | "" | Manual namespace override (bypasses auto-generation) | - |
+
+## Optional Variables
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `app_id` | string | "" | A unique identifier (UUID, organization ID, team ID) to prevent namespace collisions. Creates namespace path: `{prefix}/{app_id}/{app_name}`. Set via `VAULT_APP_ID` env var in Waypoint |
-| `organization_id` | string | "" | Organization or customer UUID. Fallback if `app_id` not provided. Set via `VAULT_ORGANIZATION_ID` env var |
-| `team_id` | string | "" | Team ID for additional namespace scoping. When both `organization_id` and `team_id` provided, creates: `{prefix}/{organization_id}/{team_id}/{app_id}/{app_name}`. Set via `VAULT_TEAM_ID` env var |
-| `use_random_suffix` | bool | false | Generates a random 4-byte hex suffix appended to namespace. Creates path: `{prefix}{app_name}-{random}`. Ignored if `app_id` or `organization_id` is provided. Set via `VAULT_USE_RANDOM_SUFFIX` env var |
+| `vault_namespace` | string | "" | Parent Vault namespace to auth against |
+| `skip_tls_verify` | bool | false | Skip TLS verification (not recommended for prod) |
+| `secrets_engine_path` | string | "secrets" | KV engine mount path |
+| `kv_path` | string | "data" | Data path within KV engine |
+| `policy_name` | string | "app-policy" | Policy name |
+| `auth_method_path` | string | "approle" | AppRole mount path |
+| `role_name` | string | "app-role" | AppRole role name |
+| `token_ttl` | number | 3600 | Token lifetime in seconds |
+| `token_max_ttl` | number | 86400 | Max token lifetime in seconds |
+| `secret_id_ttl` | number | 0 | SecretID lifetime (0 = never expires) |
+| `bind_secret_id` | bool | true | Require SecretID for authentication |
 
-### Optional Variables
-
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `namespace_prefix` | string | "" | The prefix path for the Vault namespace (e.g., 'ns1/cns2/'). Can be set via `VAULT_NAMESPACE_PREFIX` environment variable |
-| `namespace_path` | string | "" | Override for the complete namespace path. If provided, ignores all other path construction logic |
-| `vault_namespace` | string | "" | The parent Vault namespace to authenticate to |
-| `skip_tls_verify` | bool | false | Skip TLS verification when connecting to Vault |
-| `secrets_engine_path` | string | "secrets" | The path where the KV secrets engine will be mounted |
-| `kv_path` | string | "data" | The path within the KV engine where secrets are stored |
-| `policy_name` | string | "app-policy" | The name of the policy to create |
-| `auth_method_path` | string | "approle" | The path where AppRole auth method will be mounted |
-| `role_name` | string | "app-role" | The name of the AppRole role |
-| `token_ttl` | number | 3600 | The TTL of issued tokens in seconds (1 hour) |
-| `token_max_ttl` | number | 86400 | The max TTL of issued tokens in seconds (24 hours) |
-| `secret_id_ttl` | number | 0 | The TTL of the SecretID in seconds (0 = no expiration) |
-| `bind_secret_id` | bool | true | Whether the role should require a SecretID |
-
-## Module Outputs
+## Outputs
 
 | Output | Description |
 |--------|-------------|
-| `namespace_id` | The ID of the created Vault namespace |
-| `namespace_path` | The path of the created Vault namespace |
-| `secrets_engine_path` | The path of the KV secrets engine |
-| `policy_name` | The name of the created policy |
-| `auth_method_path` | The path of the AppRole auth method |
-| `role_name` | The name of the AppRole role |
-| `role_id` | The RoleID for AppRole authentication |
-| `secret_id` | The SecretID for AppRole authentication (sensitive) |
-| `app_auth_config` | Complete AppRole configuration object for the application (sensitive) |
+| `namespace_id` | Vault namespace ID |
+| `namespace_path` | Full namespace path |
+| `secrets_engine_path` | KV engine path |
+| `policy_name` | Policy name |
+| `role_id` | AppRole RoleID |
+| `secret_id` | AppRole SecretID (sensitive) |
+| `app_auth_config` | Complete auth config for application (sensitive) |
+| `app_id` | Resolved app ID (UUID, org_id, or random) |
+| `organization_id` | Organization ID if provided |
+| `team_id` | Team ID if provided |
 
-## Example Configuration
+## Collision Avoidance Strategies
 
-### Basic Example (App name becomes namespace)
+### Strategy 1: Organization/Team UUID (Recommended for SaaS)
 
-```hcl
-module "app_vault" {
-  source = "./"
-
-  app_name      = "payment-service"
-  vault_address = "https://vault.internal.company.com:8200"
-  vault_token   = var.vault_admin_token
-  # Namespace will be: payment-service
-}
-
-output "app_credentials" {
-  value     = module.app_vault.app_auth_config
-  sensitive = true
-}
-```
-
-### With Organization UUID (Recommended for Multi-Tenant)
-
-```hcl
-module "app_vault" {
-  source = "./"
-
-  app_name        = "app-a"
-  organization_id = "550e8400-e29b-41d4-a716-446655440000"  # Customer/Org UUID
-  vault_address   = "https://vault.internal.company.com:8200"
-  vault_token     = var.vault_admin_token
-  # Namespace will be: 550e8400-e29b-41d4-a716-446655440000/app-a
-  # This prevents collision even if another customer also has "app-a"
-}
-```
-
-### With Organization + Team UUID (Hierarchical)
-
-```hcl
-module "app_vault" {
-  source = "./"
-
-  app_name        = "payment-service"
-  organization_id = "acme-corp-uuid"
-  team_id         = "payments-team-uuid"
-  vault_address   = "https://vault.internal.company.com:8200"
-  vault_token     = var.vault_admin_token
-  # Namespace will be: acme-corp-uuid/payments-team-uuid/payment-service
-}
-```
-
-### With Organization UUID via Environment Variable
+Use organization and team identifiers to scope namespaces hierarchically.
 
 ```bash
-# Set environment variable with organization UUID
-export VAULT_ORGANIZATION_ID="550e8400-e29b-41d4-a716-446655440000"
+export VAULT_ORGANIZATION_ID="customer-a-uuid"
+export VAULT_TEAM_ID="payments-team"
 terraform apply
 ```
 
-```hcl
-module "app_vault" {
-  source = "./"
+**Result:** `{organization_id}/{team_id}/{app_name}`
+**Best for:** Multi-tenant systems, clear ownership model
 
-  app_name      = "app-a"
-  vault_address = "https://vault.internal.company.com:8200"
-  vault_token   = var.vault_admin_token
-  # organization_id read from VAULT_ORGANIZATION_ID env var
-  # Namespace will be: 550e8400-e29b-41d4-a716-446655440000/app-a
+### Strategy 2: Random Suffix
+
+Auto-generate a random suffix for uniqueness.
+
+```hcl
+module "vault_app" {
+  source = "./"
+  
+  app_name          = "api-service"
+  use_random_suffix = true
 }
 ```
 
-### With Auto-Generated UUID
+**Result:** `{app_name}-{random_hex}`
+**Best for:** Simple deployments, no external UUID needed
+
+### Strategy 3: Manual Override
+
+Specify exact namespace path.
 
 ```hcl
-module "app_vault" {
+module "vault_app" {
   source = "./"
-
-  app_name      = "my-service"
-  app_id        = uuidv4()  # Generates unique UUID
-  vault_address = "https://vault.internal.company.com:8200"
-  vault_token   = var.vault_admin_token
-  # Namespace will be: <generated-uuid>/my-service
+  
+  app_name       = "api-service"
+  namespace_path = "production/team-a/v2"
 }
 ```
 
-### With Random Suffix (Simple Alternative)
+**Best for:** Complex naming schemes, existing infrastructure
 
-```hcl
-module "app_vault" {
-  source = "./"
+## Examples
 
-  app_name           = "app-b"
-  use_random_suffix  = true
-  vault_address      = "https://vault.internal.company.com:8200"
-  vault_token        = var.vault_admin_token
-  # Namespace will be: app-b-a1b2c3d4 (with random suffix)
-}
-```
-
-### With Namespace Prefix
-
-```hcl
-module "app_vault" {
-  source = "./"
-
-  app_name           = "payment-service"
-  vault_address      = "https://vault.internal.company.com:8200"
-  vault_token        = var.vault_admin_token
-  namespace_prefix   = "production/services/"
-  # Namespace will be: production/services/payment-service
-}
-```
-
-### With Prefix + UUID (Best Practice)
-
-```hcl
-module "app_vault" {
-  source = "./"
-
-  app_name        = "payment-service"
-  organization_id = var.customer_uuid
-  vault_address   = "https://vault.internal.company.com:8200"
-  vault_token     = var.vault_admin_token
-  namespace_prefix = "production/"
-  # Namespace will be: production/{customer_uuid}/payment-service
-}
-```
-
-### With Prefix + Organization + Team (Enterprise Multi-Tier)
-
-```hcl
-module "app_vault" {
-  source = "./"
-
-  app_name         = "api-gateway"
-  organization_id  = var.customer_id
-  team_id          = var.team_id
-  vault_address    = "https://vault.internal.company.com:8200"
-  vault_token      = var.vault_admin_token
-  namespace_prefix = "production/customers/"
-  # Namespace will be: production/customers/{customer_id}/{team_id}/api-gateway
-}
-```
-
-### With Custom Settings
-
-```hcl
-module "app_vault" {
-  source = "./"
-
-  app_name            = "database-migrate"
-  app_id              = "team-data-eng"
-  vault_address       = "https://vault.internal.company.com:8200"
-  vault_token         = var.vault_admin_token
-  namespace_prefix    = "staging/"
-  policy_name         = "db-migrate-policy"
-  secrets_engine_path = "db-secrets"
-  token_ttl           = 1800  # 30 minutes
-  token_max_ttl       = 43200 # 12 hours
-  # Namespace will be: staging/team-data-eng/database-migrate
-}
-```
-
-## Generating UUIDs
-
-When using the `app_id` variable, you can generate UUIDs in several ways:
-
-### Using `uuidv4()` in Terraform
-
-```hcl
-module "app_vault" {
-  source = "./"
-
-  app_name      = "app-a"
-  app_id        = uuidv4()  # Generates random UUID on each apply
-  vault_address = "https://vault.example.com:8200"
-  vault_token   = var.vault_admin_token
-}
-```
-
-### Using External UUID Tools
-
-```bash
-# Generate UUID once, then use it
-export VAULT_APP_ID=$(uuidgen)
-terraform apply
-```
-
-### Using Organization/Team Identifiers
-
-```hcl
-module "app_vault" {
-  source = "./"
-
-  app_name      = "app-a"
-  app_id        = "${var.organization_id}-${var.team_id}"
-  vault_address = "https://vault.example.com:8200"
-  vault_token   = var.vault_admin_token
-}
-```
-
-### Recommendation: Store and Reuse IDs
-
-For production environments, store the `app_id` in state or configuration to ensure consistency:
+### SaaS Multi-Tenant Setup
 
 ```hcl
 locals {
-  app_id = "org-prod-payment-service"  # Fixed identifier
-}
-
-module "app_vault" {
-  source = "./"
-
-  app_name      = "payment-service"
-  app_id        = local.app_id
-  vault_address = "https://vault.example.com:8200"
-  vault_token   = var.vault_admin_token
-}
-
-output "namespace_details" {
-  value = {
-    app_id = local.app_id
-    path   = module.app_vault.namespace_path
+  customers = {
+    acme   = "acme-corp-uuid"
+    beta   = "beta-industries-uuid"
   }
 }
+
+module "customer_vault" {
+  for_each = local.customers
+  
+  source = "./"
+  
+  app_name        = "api-service"
+  organization_id = each.value
+  vault_address   = var.vault_address
+  vault_token     = var.vault_token
+}
+
+# Creates:
+# - acme-corp-uuid/api-service
+# - beta-industries-uuid/api-service
 ```
 
-## Access Control
+### Enterprise Multi-Team
 
-The created policy grants the application the following capabilities:
+```hcl
+variable "organization_id" {
+  type = string
+}
 
-- **Read/Write/Delete secrets**: Full access to secrets within the KV engine
-- **List secrets**: Ability to list available secrets
-- **Renew tokens**: Ability to renew authentication tokens
+locals {
+  teams = {
+    platform   = "platform-team-uuid"
+    payments   = "payments-team-uuid"
+  }
+}
 
-## Authentication Flow
+module "team_services" {
+  for_each = local.teams
+  
+  source = "./"
+  
+  app_name         = "service-a"
+  organization_id  = var.organization_id
+  team_id          = each.value
+  namespace_prefix = "production/"
+  vault_address    = var.vault_address
+  vault_token      = var.vault_token
+}
 
-1. Application authenticates using RoleID and SecretID
-2. Vault returns a token valid for the specified TTL
-3. Application uses token to access secrets in its namespace
-4. Application renews token before expiration
-
-## Security Considerations
-
-- Store the SecretID securely (consider using Vault's Secret ID rotation)
-- Rotate credentials regularly
-- Use `token_ttl` and `token_max_ttl` to limit token validity
-- The module enforces SecretID requirements by default (`bind_secret_id = true`)
-- Use appropriate TLS verification in production (`skip_tls_verify = false`)
-
-## Module Structure
-
+# Creates:
+# - production/org/platform-team-uuid/service-a
+# - production/org/payments-team-uuid/service-a
 ```
-.
-├── main.tf           # Main configuration with Vault resources
-├── variables.tf      # Input variable definitions
-├── outputs.tf        # Output definitions
-├── waypoint.hcl      # Waypoint add-on configuration
-├── policies/
-│   └── app_policy.hcl # AppRole policy template
-└── README.md         # This file
+
+### CI/CD Pipeline
+
+```bash
+#!/bin/bash
+
+case "${ENVIRONMENT}" in
+  production)
+    export VAULT_ORGANIZATION_ID="prod-org-uuid"
+    export VAULT_NAMESPACE_PREFIX="prod/"
+    ;;
+  staging)
+    export VAULT_ORGANIZATION_ID="staging-org-uuid"
+    export VAULT_NAMESPACE_PREFIX="staging/"
+    ;;
+esac
+
+terraform apply
 ```
 
 ## Waypoint Deployment
 
-To deploy as a Waypoint add-on in your application:
-
-### Simple Deployment (App name as namespace)
+### Basic
 
 ```hcl
 addon {
@@ -426,109 +255,148 @@ addon {
 }
 ```
 
-### With Organization UUID (Recommended)
+### With Organization UUID
 
-```hcl
-addon {
-  pack = "terraform-vault-vault-app"
-  
-  variables = {
-    app_name        = context.application.name
-    organization_id = var.customer_uuid  # Use customer/org UUID
-    vault_address   = var.vault_address
-    vault_token     = var.vault_token
-  }
-}
-```
-
-Alternatively, set via environment variable:
 ```bash
-export VAULT_ORGANIZATION_ID="550e8400-e29b-41d4-a716-446655440000"
+export VAULT_ORGANIZATION_ID="customer-uuid"
 waypoint up
 ```
 
-### With Organization + Team UUID (Hierarchical)
+### With Team Scoping
 
-```hcl
-addon {
-  pack = "terraform-vault-vault-app"
-  
-  variables = {
-    app_name        = context.application.name
-    organization_id = var.customer_uuid
-    team_id         = var.team_uuid
-    vault_address   = var.vault_address
-    vault_token     = var.vault_token
-  }
-}
-```
-
-Or via environment variables:
 ```bash
-export VAULT_ORGANIZATION_ID="550e8400-e29b-41d4-a716-446655440000"
-export VAULT_TEAM_ID="acme-payments-team"
+export VAULT_ORGANIZATION_ID="acme-corp"
+export VAULT_TEAM_ID="platform-team"
 waypoint up
 ```
 
-### With Random Suffix
+## Namespace Path Examples
 
-```hcl
-addon {
-  pack = "terraform-vault-vault-app"
-  
-  variables = {
-    app_name          = context.application.name
-    use_random_suffix = true
-    vault_address     = var.vault_address
-    vault_token       = var.vault_token
-  }
-}
+```
+# Simple (no collision avoidance)
+api-service
+
+# With organization
+customer-uuid/api-service
+
+# With organization + team
+customer-uuid/payments-team/api-service
+
+# With prefix
+production/api-service
+
+# Full hierarchy
+production/customer-uuid/payments-team/api-service
 ```
 
-Or via environment variable:
-```bash
-export VAULT_USE_RANDOM_SUFFIX="true"
-waypoint up
+## Environment Variables
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `VAULT_ADDR` | Vault address | `https://vault.example.com:8200` |
+| `VAULT_TOKEN` | Vault token | Your admin token |
+| `VAULT_NAMESPACE_PREFIX` | Namespace prefix | `production/` |
+| `VAULT_ORGANIZATION_ID` | Organization UUID | `550e8400-e29b-41d4-...` |
+| `VAULT_TEAM_ID` | Team ID | `payments-team` |
+| `VAULT_APP_ID` | App UUID | `service-uuid` |
+| `VAULT_USE_RANDOM_SUFFIX` | Enable random suffix | `true` |
+
+## Application Usage
+
+After deployment, use the credentials to access Vault:
+
+```go
+// Go example
+import "github.com/hashicorp/vault-client-go"
+
+client, _ := vault.New(
+  vault.WithAddress(output.vault_addr),
+  vault.WithAuthAppRole(roleID, secretID),
+)
+
+// Access secrets
+secret, _ := client.Secrets.KvV2Read(
+  context.Background(),
+  "secret-name",
+  vault.WithNamespace(output.namespace),
+)
 ```
 
-### With Environment Variable Prefix
+## Architecture
 
-```bash
-export VAULT_NAMESPACE_PREFIX="production/namespaces/"
-export VAULT_ORGANIZATION_ID="${CUSTOMER_ID}"
-export VAULT_TEAM_ID="${TEAM_NAME}"
-waypoint up
+```
+Vault Instance
+└── Namespace (isolated for this application)
+    ├── KV Secrets Engine (e.g., "secrets/")
+    │   └── Application Secrets
+    ├── AppRole Auth Method
+    │   └── app-role
+    │       ├── RoleID
+    │       └── SecretID
+    └── Policy (app-policy)
+        └── Permissions for KV access
 ```
 
-The `waypoint.hcl` will automatically read these environment variables and construct hierarchical namespaces.
+## Security
+
+- **Sensitive Values** - All credentials marked sensitive in Terraform
+- **Token TTL** - Set appropriate `token_ttl` and `token_max_ttl`
+- **SecretID Binding** - Enable `bind_secret_id` (default true) to require both RoleID and SecretID
+- **TLS** - Always use `skip_tls_verify = false` in production
+- **Isolation** - Each namespace fully isolated; secrets cannot be shared between apps
+- **Audit** - Enable Vault audit logging to track all access
 
 ## Troubleshooting
 
-### "Failed to authenticate with Vault"
-- Verify the `vault_address` is correct
-- Ensure the `vault_token` has appropriate permissions
-- Check network connectivity to Vault
-
 ### "Namespace already exists"
-- Choose a different `namespace_path`
-- Verify the namespace doesn't already exist in Vault
+- Use different `organization_id`, `team_id`, or `app_id`
+- Enable `use_random_suffix = true` for automatic uniqueness
 
 ### "Permission denied"
-- Ensure your Vault token has permissions to create namespaces
-- Check the attached policy allows namespace creation
+- Verify Vault token has namespace creation permissions
+- Check token has policy management capabilities
 
-## Contributing
+### "Wrong namespace structure"
+Verify variables:
+```bash
+echo "Org: $VAULT_ORGANIZATION_ID"
+echo "Team: $VAULT_TEAM_ID"
+echo "App: $VAULT_APP_ID"
+```
 
-To extend this module, you can:
-- Add additional auth methods (LDAP, JWT, etc.)
-- Create additional secrets engines
-- Define custom policies for different use cases
-- Add support for database dynamic credentials
+Priority order: `app_id` > `organization_id` > random suffix > default
+
+### Debug Commands
+
+```bash
+# Check Terraform plan
+terraform plan
+
+# Verify namespace structure
+vault namespace list
+vault namespace read <namespace>
+```
+
+## Prerequisites
+
+- Terraform >= 1.0
+- Vault >= 1.8 with admin token
+- Network access to Vault
+- For Waypoint: Waypoint >= 1.0
+
+## Module Files
+
+```
+.
+├── main.tf              # Vault resources
+├── variables.tf         # Input variables
+├── outputs.tf           # Output values
+├── waypoint.hcl        # Waypoint config
+├── policies/
+│   └── app_policy.hcl  # AppRole policy
+└── README.md           # This file
+```
 
 ## License
 
 This module is provided as-is for use with HashiCorp Vault.
-
-## Support
-
-For issues, questions, or contributions, please refer to the project repository.
