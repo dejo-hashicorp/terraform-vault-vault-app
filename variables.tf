@@ -34,13 +34,43 @@ variable "app_name" {
 }
 
 # Namespace Configuration
-variable "namespace_path" {
-  description = "The path for the new Vault namespace"
+variable "namespace_prefix" {
+  description = "The prefix path for the Vault namespace (e.g., 'ns1/cns2/') - defaults to empty. Can be set via VAULT_NAMESPACE_PREFIX env var"
   type        = string
-  validation {
-    condition     = can(regex("^[a-z0-9-]+$", var.namespace_path))
-    error_message = "Namespace path must contain only lowercase letters, numbers, and hyphens."
-  }
+  default     = ""
+}
+
+variable "app_id" {
+  description = "A unique identifier for the application (UUID, organization ID, team ID, etc.). Used to avoid namespace collisions. When provided, namespace becomes: {prefix}/{app_id}/{app_name}. Can be set via VAULT_APP_ID environment variable."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "organization_id" {
+  description = "Organization or customer UUID (deprecated - use app_id instead). Falls back to app_id if app_id is empty."
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "team_id" {
+  description = "Team ID for additional namespace scoping. When both organization_id and team_id are provided, namespace becomes: {prefix}/{organization_id}/{team_id}/{app_name}"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "use_random_suffix" {
+  description = "If true, appends a random hex suffix to the namespace path for uniqueness: {prefix}{app_name}-{random}. Ignored if app_id is provided"
+  type        = bool
+  default     = false
+}
+
+variable "namespace_path" {
+  description = "Override for the complete path for the new Vault namespace (auto-generated from prefix + app_name if not provided)"
+  type        = string
+  default     = ""
 }
 
 # Secrets Engine Configuration

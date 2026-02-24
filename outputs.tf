@@ -8,6 +8,32 @@ output "namespace_path" {
   value       = vault_namespace.app_namespace.path
 }
 
+output "app_id" {
+  description = "The resolved unique application ID used for collision avoidance (provided app_id, organization_id, or generated random suffix)"
+  value = (
+    var.app_id != "" ? var.app_id : (
+      var.organization_id != "" ? var.organization_id : (
+        var.use_random_suffix ? random_id.namespace_suffix[0].hex : ""
+      )
+    )
+  )
+}
+
+output "organization_id" {
+  description = "The organization ID if provided"
+  value       = var.organization_id != "" ? var.organization_id : null
+}
+
+output "team_id" {
+  description = "The team ID if provided"
+  value       = var.team_id != "" ? var.team_id : null
+}
+
+output "generated_random_suffix" {
+  description = "The generated random suffix if use_random_suffix is enabled"
+  value       = var.use_random_suffix ? random_id.namespace_suffix[0].hex : null
+}
+
 output "secrets_engine_path" {
   description = "The path of the KV secrets engine"
   value       = vault_mount.kv_secrets.path
