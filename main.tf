@@ -99,7 +99,7 @@ resource "vault_approle_auth_backend_role" "app_role" {
   namespace      = vault_namespace.app_namespace.id
   backend        = vault_auth_backend.approle.path
   role_name      = var.role_name
-  policies       = [vault_policy.app_policy.name]
+  token_policies = [vault_policy.app_policy.name]
   token_ttl      = var.token_ttl
   token_max_ttl  = var.token_max_ttl
   secret_id_ttl  = var.secret_id_ttl
