@@ -27,36 +27,31 @@ resource "random_id" "namespace_suffix" {
 
 # Determine the namespace path
 locals {
-  # Resolve app_id - prefer explicit app_id, fall back to organization_id
-  resolved_app_id = (
-    var.app_id != "" ? var.app_id : (
-      var.organization_id != "" ? var.organization_id : ""
-    )
-  )
+  # Check if we have app_id (explicit or from organization_id)
+  has_explicit_app_id = var.app_id != ""
+  has_org_id          = var.organization_id != ""
+  has_team_id         = var.team_id != ""
+  has_prefix          = var.namespace_prefix != ""
+  has_manual_path     = var.namespace_path != ""
 
-  # Build organization/team scope prefix
-  # If both org and team are provided: org/team
-  # If only org provided: org
-  # Otherwise: empty
-  org_team_scope = (
-    var.organization_id != "" && var.team_id != "" ? "${var.organization_id}/${var.team_id}" : (
-      var.organization_id != "" ? var.organization_id : ""
-    )
-  )
-
-  # Construct full namespace path:
-  # Priority order:
-  # 1. If namespace_path provided explicitly, use it
-  # 2. If org_team_scope + app_id provided, use: prefix/org/team/app_id/app_name
-  # 3. If only app_id provided, use: prefix/app_id/app_name
-  # 4. If random suffix enabled, use: prefix/app_name-random
-  # 5. Default, use: prefix/app_name
+  # Construct full namespace path with priority order:
+  # 1. Manual path override
+  # 2. Org + Team + app_id
+  # 3. app_id alone
+  # 4. Org + Team
+  # 5. Org alone
+  # 6. Random suffix
+  # 7. Default (just app_name)
   computed_namespace_path = (
-    var.namespace_path != "" ? var.namespace_path : (
-      var.organization_id != "" && var.team_id != "" && resolved_app_id != "" ? "${var.namespace_prefix}${var.organization_id}/${var.team_id}/${resolved_app_id}/${var.app_name}" : (
-        resolved_app_id != "" ? "${var.namespace_prefix}${resolved_app_id}/${var.app_name}" : (
-          var.use_random_suffix ? "${var.namespace_prefix}${var.app_name}-${random_id.namespace_suffix[0].hex}" : (
-            "${var.namespace_prefix}${var.app_name}"
+    local.has_manual_path ? var.namespace_path : (
+      local.has_org_id && local.has_team_id && local.has_explicit_app_id ? "${var.namespace_prefix}${var.organization_id}/${var.team_id}/${var.app_id}/${var.app_name}" : (
+        local.has_explicit_app_id ? "${var.namespace_prefix}${var.app_id}/${var.app_name}" : (
+          local.has_org_id && local.has_team_id ? "${var.namespace_prefix}${var.organization_id}/${var.team_id}/${var.app_name}" : (
+            local.has_org_id ? "${var.namespace_prefix}${var.organization_id}/${var.app_name}" : (
+              var.use_random_suffix ? "${var.namespace_prefix}${var.app_name}-${random_id.namespace_suffix[0].hex}" : (
+                "${var.namespace_prefix}${var.app_name}"
+              )
+            )
           )
         )
       )

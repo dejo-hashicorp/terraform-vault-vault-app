@@ -17,16 +17,19 @@ output "app_id" {
       )
     )
   )
+  sensitive = true
 }
 
 output "organization_id" {
   description = "The organization ID if provided"
   value       = var.organization_id != "" ? var.organization_id : null
+  sensitive   = true
 }
 
 output "team_id" {
   description = "The team ID if provided"
   value       = var.team_id != "" ? var.team_id : null
+  sensitive   = true
 }
 
 output "generated_random_suffix" {
