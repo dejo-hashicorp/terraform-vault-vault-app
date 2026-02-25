@@ -66,7 +66,7 @@ resource "vault_namespace" "app_namespace" {
 
 # Create a KV secrets engine for the application
 resource "vault_mount" "kv_secrets" {
-  namespace   = vault_namespace.app_namespace.id
+  namespace   = var.app_name
   path        = var.secrets_engine_path
   type        = "kv"
   description = "KV Secrets engine for ${var.app_name}"
@@ -78,7 +78,7 @@ resource "vault_mount" "kv_secrets" {
 
 # Create a policy for the application
 resource "vault_policy" "app_policy" {
-  namespace = vault_namespace.app_namespace.id
+  namespace = var.app_name
   name      = var.policy_name
   policy = templatefile("${path.module}/policies/app_policy.hcl", {
     app_name            = var.app_name
@@ -89,7 +89,7 @@ resource "vault_policy" "app_policy" {
 
 # Create an auth method (AppRole)
 resource "vault_auth_backend" "approle" {
-  namespace = vault_namespace.app_namespace.id
+  namespace = var.app_name
   type      = "approle"
   path      = var.auth_method_path
 }
