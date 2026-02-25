@@ -6,6 +6,7 @@ output "namespace_id" {
 output "namespace_path" {
   description = "The path of the created Vault namespace"
   value       = vault_namespace.app_namespace.path
+  sensitive   = true
 }
 
 output "app_id" {
