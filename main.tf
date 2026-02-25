@@ -104,7 +104,7 @@ resource "vault_auth_backend" "approle" {
 
 # Create an AppRole role for the application
 resource "vault_approle_auth_backend_role" "app_role" {
-  namespace      = vault_namespace.app_namespace.id
+  provider       = vault.app_namespace
   backend        = vault_auth_backend.approle.path
   role_name      = var.role_name
   token_policies = [vault_policy.app_policy.name]
