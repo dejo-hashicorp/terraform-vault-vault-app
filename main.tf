@@ -42,21 +42,23 @@ locals {
   # 5. Org alone
   # 6. Random suffix
   # 7. Default (just app_name)
-  computed_namespace_path = (
+  prefix_with_slash = local.has_prefix ? "${trimsuffix(var.namespace_prefix, "/")}" : ""
+  
+  computed_namespace_path = trimregex("/$", (
     local.has_manual_path ? var.namespace_path : (
-      local.has_org_id && local.has_team_id && local.has_explicit_app_id ? "${var.namespace_prefix}${var.organization_id}/${var.team_id}/${var.app_id}/${var.app_name}" : (
-        local.has_explicit_app_id ? "${var.namespace_prefix}${var.app_id}/${var.app_name}" : (
-          local.has_org_id && local.has_team_id ? "${var.namespace_prefix}${var.organization_id}/${var.team_id}/${var.app_name}" : (
-            local.has_org_id ? "${var.namespace_prefix}${var.organization_id}/${var.app_name}" : (
-              var.use_random_suffix ? "${var.namespace_prefix}${var.app_name}-${random_id.namespace_suffix[0].hex}" : (
-                "${var.namespace_prefix}${var.app_name}"
+      local.has_org_id && local.has_team_id && local.has_explicit_app_id ? "${local.prefix_with_slash}${local.prefix_with_slash != "" ? "/" : ""}${var.organization_id}/${var.team_id}/${var.app_id}/${var.app_name}" : (
+        local.has_explicit_app_id ? "${local.prefix_with_slash}${local.prefix_with_slash != "" ? "/" : ""}${var.app_id}/${var.app_name}" : (
+          local.has_org_id && local.has_team_id ? "${local.prefix_with_slash}${local.prefix_with_slash != "" ? "/" : ""}${var.organization_id}/${var.team_id}/${var.app_name}" : (
+            local.has_org_id ? "${local.prefix_with_slash}${local.prefix_with_slash != "" ? "/" : ""}${var.organization_id}/${var.app_name}" : (
+              var.use_random_suffix ? "${local.prefix_with_slash}${local.prefix_with_slash != "" ? "/" : ""}${var.app_name}-${random_id.namespace_suffix[0].hex}" : (
+                "${local.prefix_with_slash}${local.prefix_with_slash != "" ? "/" : ""}${var.app_name}"
               )
             )
           )
         )
       )
     )
-  )
+  ))
 }
 
 # Create a new namespace for the application
