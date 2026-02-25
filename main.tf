@@ -116,7 +116,7 @@ resource "vault_approle_auth_backend_role" "app_role" {
 
 # Generate RoleID and SecretID
 resource "vault_approle_auth_backend_role_secret_id" "app_secret_id" {
-  namespace = vault_namespace.app_namespace.id
+  provider  = vault.app_namespace
   backend   = vault_auth_backend.approle.path
   role_name = vault_approle_auth_backend_role.app_role.role_name
   ttl       = var.secret_id_ttl
