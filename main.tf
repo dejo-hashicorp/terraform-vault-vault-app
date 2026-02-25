@@ -15,7 +15,15 @@ terraform {
 provider "vault" {
   address         = var.vault_address
   token           = var.vault_token
-  namespace       = var.vault_namespace
+  namespace       = var.namespace_prefix
+  skip_tls_verify = var.skip_tls_verify
+}
+
+provider "vault" {
+  alias           = "app_namespace"
+  address         = var.vault_address
+  token           = var.vault_token
+  namespace       = vault_namespace.app_namespace.id
   skip_tls_verify = var.skip_tls_verify
 }
 
@@ -66,7 +74,7 @@ resource "vault_namespace" "app_namespace" {
 
 # Create a KV secrets engine for the application
 resource "vault_mount" "kv_secrets" {
-  namespace   = var.app_name
+  provider    = vault.app_namespace
   path        = var.secrets_engine_path
   type        = "kv"
   description = "KV Secrets engine for ${var.app_name}"
@@ -78,7 +86,7 @@ resource "vault_mount" "kv_secrets" {
 
 # Create a policy for the application
 resource "vault_policy" "app_policy" {
-  namespace = var.app_name
+  provider  = vault.app_namespace
   name      = var.policy_name
   policy = templatefile("${path.module}/policies/app_policy.hcl", {
     app_name            = var.app_name
@@ -89,7 +97,7 @@ resource "vault_policy" "app_policy" {
 
 # Create an auth method (AppRole)
 resource "vault_auth_backend" "approle" {
-  namespace = var.app_name
+  provider  = vault.app_namespace
   type      = "approle"
   path      = var.auth_method_path
 }
