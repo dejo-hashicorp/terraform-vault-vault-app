@@ -61,7 +61,7 @@ locals {
 
 # Create a new namespace for the application
 resource "vault_namespace" "app_namespace" {
-  path = local.computed_namespace_path
+  path = var.app_name
 }
 
 # Create a KV secrets engine for the application
